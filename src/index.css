@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0d14;
+  --card: #111827;
+  --border: #1f2937;
+  --cyber-blue: #3b82f6;
+  --cyber-amber: #f59e0b;
+  --cyber-red: #ef4444;
+}
+
+@theme inline {
+  --color-bg: #0a0d14;
+  --color-card: #111827;
+  --color-border: #1f2937;
+  --color-foreground: #e5e7eb;
+  --color-muted-foreground: #6b7280;
+  --color-cyber-blue: #3b82f6;
+  --color-cyber-amber: #f59e0b;
+  --color-cyber-red: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--color-foreground);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+.animate-slide-down { animation: slideDown 0.25s ease-out; }
+.animate-spin { animation: spin 1s linear infinite; }
