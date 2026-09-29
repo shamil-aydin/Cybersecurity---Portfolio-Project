@@ -178,7 +178,10 @@ export async function checkConnection(creds) {
   const started = performance.now()
   try {
     const token = await requestToken(creds)
-    const resp = await call('/', { headers: { Authorization: `Bearer ${token}` } })
+    // No trailing slash: the Vercel rewrite (`/api/:path*` -> `/api/wazuh?path=:path*`)
+    // doesn't match a zero-segment path that still has a trailing slash (`/api/`
+    // 404s; `/api` doesn't) — confirmed against the live deployment.
+    const resp = await call('', { headers: { Authorization: `Bearer ${token}` } })
     const info = await resp.json().catch(() => null)
     return { ok: true, latencyMs: Math.round(performance.now() - started), version: info?.data?.api_version ?? null }
   } catch (error) {
