@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:legacy-tls": "node --openssl-config=scripts/openssl-legacy.cnf node_modules/vite/bin/vite.js",
+    "check:wazuh-tls": "node scripts/wazuh-tls-check.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

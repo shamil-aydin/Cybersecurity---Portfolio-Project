@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Search, SlidersHorizontal, X, ShieldAlert, ChevronRight, RefreshCw, User, Wifi, WifiOff } from 'lucide-react'
 import { categories, incidentStatuses } from '../data/mockData'
 import { getThreatColor } from '../utils/threatColor'
-import { fetchIncidents } from '../services/wazuhApi'
+import { fetchIncidentsFromIndexer } from '../services/wazuhIndexer'
 
 export default function Incidents() {
   const [search, setSearch] = useState('')
@@ -20,14 +20,16 @@ export default function Incidents() {
     async function loadIncidents() {
       setLoadingIncidents(true)
 
-      const res = await fetchIncidents().catch(() => ({ source: 'mock', data: [] }))
+      const res = await fetchIncidentsFromIndexer().catch(() => ({ source: 'mock', data: [] }))
 
       if (!cancelled) {
-        if (res.source === 'wazuh') setApiSource('wazuh')
-        if (res.data && res.data.length > 0) {
-          setIncidents(res.data)
+        if (res.source === 'wazuh') {
+          // Connected: show real data even when it's an empty array — that's a
+          // legitimate "no incidents yet" state, not a reason to substitute mock data.
+          setApiSource('wazuh')
+          setIncidents(res.data || [])
         } else {
-          // Fallback to mock data
+          // Indexer unreachable/erroring: fall back to mock data
           const mock = [
             {
               id: 'INC-201',
@@ -191,7 +193,12 @@ export default function Incidents() {
         {loadingIncidents ? (
           <div className="text-center py-16 text-muted-foreground">
             <div className="animate-spin w-8 h-8 border-2 border-cyber-blue border-t-transparent rounded-full mx-auto mb-3" />
-            <p>Connecting to Wazuh Manager...</p>
+            <p>Connecting to Wazuh...</p>
+          </div>
+        ) : apiSource === 'wazuh' && incidents.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground">
+            <ShieldAlert className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>No incidents yet — connected to Wazuh, nothing reported so far.</p>
           </div>
         ) : filteredIncidents.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">

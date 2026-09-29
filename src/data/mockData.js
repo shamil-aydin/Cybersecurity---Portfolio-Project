@@ -1,4 +1,3 @@
-import { getThreatColor } from '../utils/threatColor'
 
 // ── Hourly threat events for the Overview timeline ──
 export const hourlyThreatEvents = [

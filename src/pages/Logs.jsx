@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Search, Download, FileJson, FileSpreadsheet, Filter, ChevronDown, Clock } from 'lucide-react'
 import { logEntries, logLevels, logSources } from '../data/mockData'
-import { fetchLogs } from '../services/wazuhApi'
+import { fetchLogsFromIndexer } from '../services/wazuhIndexer'
 
 export default function Logs() {
   const [search, setSearch] = useState('')
@@ -20,12 +20,14 @@ export default function Logs() {
     async function loadLogs() {
       setLoadingLogs(true)
 
-      const res = await fetchLogs().catch(() => ({ source: 'mock', data: logEntries }))
+      const res = await fetchLogsFromIndexer().catch(() => ({ source: 'mock', data: logEntries }))
 
       if (!cancelled) {
-        if (res.source === 'wazuh') setApiSource('wazuh')
-        if (res.data && res.data.length > 0) {
-          setApiLogs(res.data)
+        if (res.source === 'wazuh') {
+          // Connected: show real data even when it's an empty array — that's a
+          // legitimate "no log events yet" state, not a reason to substitute mock data.
+          setApiSource('wazuh')
+          setApiLogs(res.data || [])
         } else {
           setApiLogs(logEntries)
           setApiSource('mock')
@@ -176,7 +178,7 @@ export default function Logs() {
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
                 <div className="animate-spin w-8 h-8 border-2 border-cyber-blue border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Connecting to Wazuh Manager...</p>
+                <p className="text-sm text-muted-foreground">Connecting to Wazuh...</p>
               </div>
             </div>
           ) : (
@@ -192,6 +194,15 @@ export default function Logs() {
               </tr>
             </thead>
             <tbody>
+              {filteredLogs.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-16 text-center text-muted-foreground">
+                    {apiSource === 'wazuh' && apiLogs.length === 0
+                      ? 'No log events yet — connected to Wazuh, nothing reported so far.'
+                      : 'No log events match your filters.'}
+                  </td>
+                </tr>
+              )}
               {filteredLogs.map((entry) => (
                 <tr key={entry.id} className="border-b border-border/30 hover:bg-cyber-blue/5 transition-colors">
                   <td className="py-3 px-4 text-muted-foreground font-mono text-xs">#{entry.id}</td>

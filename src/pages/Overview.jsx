@@ -1,222 +1,175 @@
-import { useState, useEffect, useMemo } from 'react'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts'
-import { Activity, AlertTriangle, ShieldCheck, Clock, ArrowUpRight, ShieldAlert } from 'lucide-react'
-import { getThreatColor } from '../utils/threatColor'
-import { fetchAlerts, fetchOverviewStats, fetchHourlyThreatEvents } from '../services/wazuhApi'
+import { useEffect, useMemo, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { getSeverityColor, getSeverityLabel, SEVERITY_MAX } from '../utils/severity'
+import { resetConnectionCache } from '../services/wazuhApi'
+import { fetchAlertsFromIndexer, fetchOverviewStatsFromIndexer, fetchHourlyThreatEventsFromIndexer } from '../services/wazuhIndexer'
+import BootLoader from '../components/BootLoader'
+import CountUp from '../components/CountUp'
+import Sparkline from '../components/Sparkline'
+import SeverityMark from '../components/SeverityMark'
+import ThreatTimeline from '../components/ThreatTimeline'
+import ConnectionNotice from '../components/ConnectionNotice'
 
-function StatCard({ icon: Icon, label, value, trend, color, accent, loading }) {
-  if (loading) {
-    return (
-      <div className="bg-card border border-border rounded-xl p-5 shadow-sm animate-pulse">
-        <div className="h-4 bg-border/50 rounded w-24 mb-3" />
-        <div className="h-8 bg-border/50 rounded w-16 mb-2" />
-        <div className="h-3 bg-border/50 rounded w-20" />
-      </div>
-    )
-  }
+const MIN_BOOT_MS = 1400
+const TOP_N = 5
+
+// Index = mean severity of the strongest alerts, on the shared 0-20 scale.
+function computeThreatIndex(alerts) {
+  const top = alerts
+    .map((a) => Number(a.severity) || 0)
+    .sort((a, b) => b - a)
+    .slice(0, TOP_N)
+  if (!top.length) return 0
+  return Math.round(top.reduce((s, v) => s + v, 0) / top.length)
+}
+
+const fmtIndex = (n) => String(Math.round(n)).padStart(2, '0')
+
+function Eyebrow({ children }) {
+  return <p className="text-xs uppercase tracking-[0.25em] text-accent">{children}</p>
+}
+
+function SeverityGauge({ value }) {
+  const reduce = useReducedMotion()
+  const ticks = SEVERITY_MAX + 1
   return (
-    <div className="bg-card border border-border rounded-xl p-5 shadow-sm">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Icon className="w-4 h-4" style={{ color }} />
-            {label}
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{value}</div>
-          <div className="mt-1 text-xs" style={{ color: accent }}>
-            {trend}
-          </div>
-        </div>
-        <ArrowUpRight className="w-5 h-5 text-muted-foreground" />
+    <div
+      role="meter"
+      aria-label="Threat index"
+      aria-valuemin={0}
+      aria-valuemax={SEVERITY_MAX}
+      aria-valuenow={value}
+      className="mt-8"
+    >
+      <div className="flex h-10 items-end gap-[3px] sm:gap-1">
+        {Array.from({ length: ticks }, (_, i) => {
+          const lit = i <= value
+          return (
+            <motion.span
+              key={i}
+              className="flex-1"
+              style={{ background: getSeverityColor(i), transformOrigin: 'bottom' }}
+              initial={{ scaleY: 0.15, opacity: 0.25 }}
+              animate={{ scaleY: lit ? 1 : 0.35, opacity: lit ? 1 : 0.28, height: '100%' }}
+              transition={{ duration: reduce ? 0 : 0.5, delay: reduce ? 0 : i * 0.035, ease: [0.16, 1, 0.3, 1] }}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted">
+        <span>00 stable</span>
+        <span>10</span>
+        <span>20 critical</span>
       </div>
     </div>
   )
 }
 
-function ThreatTimeline({ data, loading }) {
-  const [range, setRange] = useState('24h')
-
+function LedgerRow({ label, children, spark, sparkColor, index }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Threat Events Timeline</h3>
-          <p className="text-sm text-muted-foreground mt-1">Hourly detection volume across monitored assets</p>
-        </div>
-        <div className="flex gap-2">
-          {['24h', '7d', '30d'].map((r) => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                range === r
-                  ? 'bg-cyber-blue/20 text-cyber-blue'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="h-72">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin w-8 h-8 border-2 border-cyber-blue border-t-transparent rounded-full" />
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data}>
-              <defs>
-                <linearGradient id="eventsFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.02} />
-                </linearGradient>
-                <linearGradient id="blockedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0.02} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
-              <XAxis dataKey="hour" stroke="#6b7280" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <YAxis stroke="#6b7280" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#111827',
-                  border: '1px solid #1f2937',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-              />
-              <Legend iconType="circle" iconSize={8} />
-              <Area
-                type="monotone"
-                dataKey="events"
-                name="Events"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                fill="url(#eventsFill)"
-              />
-              <Area
-                type="monotone"
-                dataKey="blocked"
-                name="Blocked"
-                stroke="#ef4444"
-                strokeWidth={2}
-                fill="url(#blockedFill)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-    </div>
+    <motion.div
+      className="group flex items-end gap-3 py-4 transition-colors hover:bg-panel/70"
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: 0.4 + index * 0.1, duration: 0.4 }}
+    >
+      <span className="shrink-0 text-xs uppercase tracking-widest text-muted transition-colors group-hover:text-ink">{label}</span>
+      <span aria-hidden="true" className="mb-1.5 min-w-4 flex-1 border-b border-dotted border-line" />
+      {spark && <span className="mb-1 hidden shrink-0 sm:block">{<Sparkline data={spark} color={sparkColor} />}</span>}
+      <span className="shrink-0 font-display text-3xl font-bold leading-none tabular-nums text-ink sm:text-4xl">{children}</span>
+    </motion.div>
   )
 }
 
-function AlertsTable({ alerts, loading }) {
-  const [filter, setFilter] = useState('all')
-
-  const filteredAlerts = alerts.filter((alert) => {
-    if (filter === 'all') return true
-    return alert.status === filter
-  })
-
-  if (loading) {
-    return (
-      <div className="bg-card border border-border rounded-xl p-6">
-        <div className="h-5 bg-border/50 rounded w-48 mb-6" />
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-8 bg-border/50 rounded animate-pulse" />
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="bg-card border border-border rounded-xl p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Recent High-Severity Alerts</h3>
-          <p className="text-sm text-muted-foreground mt-1">Critical and high-priority detections from the last hour</p>
-        </div>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="bg-bg border border-border text-xs text-muted-foreground rounded-md px-3 py-1.5 focus:outline-none focus:border-cyber-blue"
-        >
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="investigating">Investigating</option>
-          <option value="mitigated">Mitigated</option>
-        </select>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-muted-foreground border-b border-border">
-              <th className="pb-3 font-medium">Alert ID</th>
-              <th className="pb-3 font-medium">Title</th>
-              <th className="pb-3 font-medium">Source</th>
-              <th className="pb-3 font-medium">Severity</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAlerts.map((alert) => (
-              <tr key={alert.id} className="border-b border-border/50 hover:bg-cyber-blue/5 transition-colors">
-                <td className="py-4 pr-4 text-cyber-blue font-mono text-xs">{alert.id}</td>
-                <td className="py-4 pr-4">
-                  <div className="font-medium text-foreground">{alert.title}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Rule ID: {alert.ruleId}</div>
-                </td>
-                <td className="py-4 pr-4 text-muted-foreground">{alert.sourceIp || alert.source || '-'}</td>
-                <td className="py-4 pr-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 h-1.5 bg-border rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${(alert.severity / 20) * 100}%`, backgroundColor: getThreatColor(alert.severity) }}
-                      />
-                    </div>
-                    <span className="text-xs font-medium" style={{ color: getThreatColor(alert.severity) }}>
-                      {alert.severity}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-4 pr-4">
-                  <StatusBadge status={alert.status} />
-                </td>
-                <td className="py-4 text-muted-foreground text-xs">
-                  {new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
+const STATUS_STYLES = {
+  active: 'bg-accent text-bg border-accent',
+  open: 'bg-accent text-bg border-accent',
+  investigating: 'text-accent border-accent',
+  mitigated: 'text-muted border-line',
+  resolved: 'text-muted border-line',
 }
 
-function StatusBadge({ status }) {
-  const styles = {
-    active: { bg: 'bg-cyber-red/10', text: 'text-cyber-red', dot: 'bg-cyber-red' },
-    investigating: { bg: 'bg-cyber-amber/10', text: 'text-cyber-amber', dot: 'bg-cyber-amber' },
-    mitigated: { bg: 'bg-cyber-blue/10', text: 'text-cyber-blue', dot: 'bg-cyber-blue' },
-  }
-
-  const style = styles[status]
-
+function StatusTag({ status }) {
+  const style = STATUS_STYLES[status] || 'text-muted border-line'
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`inline-block border px-1.5 py-0.5 text-[10px] uppercase tracking-widest ${style}`}>
+      {status || 'unknown'}
     </span>
+  )
+}
+
+const FILTERS = ['all', 'active', 'investigating', 'mitigated']
+
+function AlertFeed({ alerts }) {
+  const [filter, setFilter] = useState('all')
+  const visible = useMemo(
+    () =>
+      alerts
+        .filter((a) => filter === 'all' || a.status === filter)
+        .sort((a, b) => b.severity - a.severity)
+        .slice(0, 8),
+    [alerts, filter],
+  )
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-12">
+      <div className="lg:col-span-3">
+        <div className="lg:sticky lg:top-20">
+          <Eyebrow>// 03 signals</Eyebrow>
+          <h2 className="mt-2 font-display text-2xl font-bold uppercase leading-tight">Highest severity right now</h2>
+          <div role="group" aria-label="Filter alerts by status" className="mt-5 flex flex-wrap gap-2 lg:flex-col lg:items-start lg:gap-1">
+            {FILTERS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                aria-pressed={filter === f}
+                onClick={() => setFilter(f)}
+                className={`px-1 py-1 text-xs uppercase tracking-widest transition-all ${
+                  filter === f ? 'text-accent' : 'text-muted hover:translate-x-1 hover:text-ink'
+                }`}
+              >
+                <span aria-hidden="true">{filter === f ? '[x] ' : '[ ] '}</span>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <ol className="lg:col-span-9 border-t border-line">
+        {visible.length === 0 && <li className="py-10 text-sm text-muted">no alerts match this filter</li>}
+        {visible.map((a, i) => {
+          const color = getSeverityColor(a.severity)
+          return (
+            <motion.li
+              key={a.id}
+              layout
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.3 }}
+              className="group relative flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-line py-4 pl-4 transition-all hover:bg-panel hover:pl-6 focus-within:bg-panel"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 w-[3px] origin-top scale-y-50 transition-transform group-hover:scale-y-100"
+                style={{ background: color }}
+              />
+              <SeverityMark value={a.severity} />
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="truncate text-sm font-semibold text-ink">{a.title}</p>
+                <p className="mt-0.5 truncate text-xs text-muted">
+                  {a.id} · rule {a.ruleId} · {a.sourceIp || a.source || 'n/a'}
+                </p>
+              </div>
+              <StatusTag status={a.status} />
+              <time className="w-14 text-right text-xs tabular-nums text-muted" dateTime={a.timestamp}>
+                {new Date(a.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </time>
+            </motion.li>
+          )
+        })}
+      </ol>
+    </div>
   )
 }
 
@@ -224,60 +177,142 @@ export default function Overview() {
   const [alerts, setAlerts] = useState([])
   const [stats, setStats] = useState(null)
   const [timeline, setTimeline] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [ready, setReady] = useState(false)
   const [source, setSource] = useState('mock')
+  const [error, setError] = useState(null)
+  const [syncedAt, setSyncedAt] = useState(null)
+
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
+    const bootStart = Date.now()
 
-    async function loadData() {
-      setLoading(true)
-
+    async function loadData(first) {
       const [statsRes, alertsRes, timelineRes] = await Promise.all([
-        fetchOverviewStats().catch(() => null),
-        fetchAlerts().catch(() => null),
-        fetchHourlyThreatEvents().catch(() => null),
+        fetchOverviewStatsFromIndexer().catch(() => null),
+        fetchAlertsFromIndexer().catch(() => null),
+        fetchHourlyThreatEventsFromIndexer().catch(() => null),
       ])
-
-      if (!cancelled) {
-        if (statsRes) { setStats(statsRes.data); setSource(statsRes.source) }
-        if (alertsRes) setAlerts(alertsRes.data)
-        if (timelineRes) setTimeline(timelineRes.data)
-        setLoading(false)
+      if (cancelled) return
+      if (statsRes) {
+        setStats(statsRes.data)
+        setSource(statsRes.source)
+      }
+      setError([statsRes, alertsRes, timelineRes].find((r) => r?.error)?.error ?? null)
+      if (alertsRes) setAlerts(alertsRes.data)
+      if (timelineRes) setTimeline(timelineRes.data)
+      setSyncedAt(new Date())
+      if (first) {
+        const wait = Math.max(0, MIN_BOOT_MS - (Date.now() - bootStart))
+        setTimeout(() => !cancelled && setReady(true), wait)
       }
     }
 
-    loadData()
+    loadData(true)
+    const interval = setInterval(() => loadData(false), 30000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [reloadKey])
 
-    // Refresh every 30s
-    const interval = setInterval(loadData, 30000)
+  const index = useMemo(() => computeThreatIndex(alerts), [alerts])
+  const color = getSeverityColor(index)
+  const s = stats || { totalAlerts: 0, highSeverity: 0, activeAgents: 0, meanTimeToDetect: 'n/a' }
+  const eventsSeries = useMemo(() => timeline.map((t) => t.events), [timeline])
+  const highSeries = useMemo(() => timeline.map((t) => t.blocked), [timeline])
 
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [])
-
-  const displayStats = stats || { totalAlerts: 0, highSeverity: 0, activeAgents: 0, meanTimeToDetect: 'N/A' }
+  if (!ready) return <BootLoader />
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Security Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Real-time posture across your monitored infrastructure
-          {source === 'wazuh' && <span className="ml-2 px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">LIVE</span>}
-          {source === 'mock' && <span className="ml-2 px-2 py-0.5 bg-cyber-amber/10 text-cyber-amber rounded text-xs">MOCK</span>}
-        </p>
-      </div>
+    <div className="mx-auto max-w-[1400px] px-4 pt-8 md:px-8 md:pt-12">
+      {/* 01 — Threat index hero + ledger (asymmetric 7/5 split) */}
+      <ConnectionNotice
+        source={source}
+        error={error}
+        onRetry={() => {
+          resetConnectionCache()
+          setReloadKey((k) => k + 1)
+        }} className="mb-8" />
+      <section aria-labelledby="hero-title" className="grid gap-10 lg:grid-cols-12 lg:gap-0">
+        <div className="lg:col-span-7 lg:pr-12">
+          <Eyebrow>// 01 overview</Eyebrow>
+          <h1 id="hero-title" className="mt-3 font-display text-sm font-medium uppercase tracking-[0.3em] text-muted">
+            Threat index
+          </h1>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-6">
+            <CountUp
+              value={index}
+              format={fmtIndex}
+              duration={1.6}
+              className="font-display text-[clamp(7rem,22vw,15rem)] font-bold leading-[0.85] tabular-nums transition-colors"
+              style={{ color }}
+            />
+            <div>
+              <p className="text-lg font-semibold tracking-[0.2em]" style={{ color }}>
+                {getSeverityLabel(index)}
+              </p>
+              <p className="text-xs text-muted">/ {SEVERITY_MAX} scale</p>
+            </div>
+          </div>
+          <SeverityGauge value={index} />
+          <p className="mt-6 max-w-lg text-sm leading-relaxed text-muted">
+            Mean severity of the {TOP_N} strongest active detections across your Wazuh estate, on a continuous 0 to 20 scale.
+          </p>
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard icon={Activity} label="Total Alerts" value={displayStats.totalAlerts.toLocaleString()} trend="+12.4% vs yesterday" color="#3b82f6" accent="#3b82f6" loading={loading} />
-        <StatCard icon={AlertTriangle} label="High Severity Incidents" value={displayStats.highSeverity} trend="+3 new this hour" color="#ef4444" accent="#ef4444" loading={loading} />
-        <StatCard icon={ShieldCheck} label="Active Agents" value={displayStats.activeAgents} trend="98.2% online" color="#3b82f6" accent="#3b82f6" loading={loading} />
-        <StatCard icon={Clock} label="Mean Time to Detect" value={displayStats.meanTimeToDetect} trend="-18% improvement" color="#f59e0b" accent="#f59e0b" loading={loading} />
-      </div>
+        <div className="border-line lg:col-span-5 lg:border-l lg:pl-10">
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span className="uppercase tracking-[0.25em]">Ledger</span>
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 ${source === 'wazuh' ? 'bg-accent' : 'border border-muted'}`}
+              />
+              {source === 'wazuh' ? 'LIVE · wazuh' : 'MOCK · sample data'}
+            </span>
+          </div>
+          <div className="mt-2 divide-y divide-line border-y border-line">
+            <LedgerRow index={0} label="Total alerts" spark={eventsSeries} sparkColor="var(--color-accent)">
+              <CountUp value={s.totalAlerts} />
+            </LedgerRow>
+            <LedgerRow index={1} label="High severity" spark={highSeries} sparkColor={getSeverityColor(14)}>
+              <CountUp value={s.highSeverity} />
+            </LedgerRow>
+            <LedgerRow index={2} label="Active agents">
+              <CountUp value={s.activeAgents} />
+            </LedgerRow>
+            <LedgerRow index={3} label="Mean time to detect">
+              <span className="text-2xl sm:text-3xl">{s.meanTimeToDetect}</span>
+            </LedgerRow>
+          </div>
+          {syncedAt && (
+            <p className="mt-3 text-[11px] text-muted">
+              synced {syncedAt.toISOString().slice(11, 19)}Z · refresh every 30s
+            </p>
+          )}
+        </div>
+      </section>
 
-      <ThreatTimeline data={timeline} loading={loading} />
+      {/* 02 — Timeline */}
+      <section aria-labelledby="timeline-title" className="mt-16 border-t-2 border-ink pt-6 md:mt-24">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <Eyebrow>// 02 timeline</Eyebrow>
+            <h2 id="timeline-title" className="mt-2 font-display text-2xl font-bold uppercase">
+              Detections by hour
+            </h2>
+          </div>
+          <p className="text-xs text-muted">hover or use ← → to inspect</p>
+        </div>
+        <ThreatTimeline data={timeline} />
+      </section>
 
-      <AlertsTable alerts={alerts} loading={loading} />
+      {/* 03 — Feed */}
+      <section aria-label="Highest severity alerts" className="mt-16 border-t-2 border-ink pt-6 md:mt-24">
+        <AlertFeed alerts={alerts} />
+      </section>
     </div>
   )
 }

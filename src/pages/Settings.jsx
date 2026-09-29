@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Save, CheckCircle, XCircle, RefreshCw, Database, Server, Key, Shield } from 'lucide-react'
+import { checkConnection, resetConnectionCache } from '../services/wazuhApi'
 
 const DEFAULT_SETTINGS = {
-  serverIp: '192.168.1.109',
+  serverIp: '10.0.2.8',
   apiPort: 55000,
   username: 'wazuh',
   password: 'wazuh',
@@ -16,21 +17,14 @@ export default function Settings() {
     try {
       const saved = localStorage.getItem('soc-settings')
       const parsed = saved ? JSON.parse(saved) : { ...DEFAULT_SETTINGS }
-      if (parsed.username === 'wazuh-admin' || parsed.username === 'admin') {
-        parsed.username = 'wazuh'
-        localStorage.setItem('soc-settings', JSON.stringify(parsed))
-      }
-      if (parsed.password !== 'wazuh') {
-        parsed.password = 'wazuh'
-        localStorage.setItem('soc-settings', JSON.stringify(parsed))
-      }
-      return parsed
+      return { ...DEFAULT_SETTINGS, ...parsed }
     } catch {
       return { ...DEFAULT_SETTINGS }
     }
   })
 
-  const [status, setStatus] = useState('unknown') // 'ok' | 'error' | 'unknown'
+  const [status, setStatus] = useState('unknown') // 'ok' | 'error' | 'checking' | 'unknown'
+  const [result, setResult] = useState(null)
   const [lastChecked, setLastChecked] = useState(null)
   const [saved, setSaved] = useState(false)
 
@@ -51,29 +45,13 @@ export default function Settings() {
   }
 
   async function checkHealth() {
-    setStatus('unknown')
+    setStatus('checking')
+    setResult(null)
+    resetConnectionCache()
+    const res = await checkConnection(settings)
+    setResult(res)
+    setStatus(res.ok ? 'ok' : 'error')
     setLastChecked(new Date())
-
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-
-      const credentials = btoa(`${settings.username}:${settings.password}`)
-      const resp = await fetch('/api/', {
-        method: 'GET',
-        signal: controller.signal,
-        headers: { Authorization: `Basic ${credentials}` },
-      })
-      clearTimeout(timeout)
-
-      if (resp.ok) {
-        setStatus('ok')
-      } else {
-        setStatus('error')
-      }
-    } catch {
-      setStatus('error')
-    }
   }
 
   return (
@@ -105,7 +83,7 @@ export default function Settings() {
                 value={settings.serverIp}
                 onChange={(e) => handleChange('serverIp', e.target.value)}
                 className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-cyber-blue"
-                placeholder="192.168.1.109"
+                placeholder="10.0.2.8"
               />
             </div>
           </div>
@@ -166,10 +144,12 @@ export default function Settings() {
             }`}>
               {status === 'ok' && <CheckCircle className="w-4 h-4" />}
               {status === 'error' && <XCircle className="w-4 h-4" />}
-              {status === 'unknown' && <RefreshCw className="w-4 h-4 animate-spin" />}
-              {status === 'ok' && 'API reachable'}
-              {status === 'error' && 'Connection failed'}
+              {status === 'checking' && <RefreshCw className="w-4 h-4 animate-spin" />}
+              {status === 'ok' && `API reachable · ${result?.latencyMs}ms${result?.version ? ` · v${result.version}` : ''}`}
+              {status === 'error' && (result?.title || 'Connection failed')}
+              {status === 'checking' && 'Checking...'}
               {status === 'unknown' && 'Not checked'}
+              {status === 'error' && result?.detail && <span className="block text-xs opacity-70">{result.detail}</span>}
             </span>
 
             {lastChecked && (

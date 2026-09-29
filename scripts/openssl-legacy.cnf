@@ -1,0 +1,13 @@
+# DEVELOPMENT ONLY. Fallback if the https.Agent option in vite.config.js is not enough.
+# Lets Node (OpenSSL 3) connect to servers that use unsafe legacy renegotiation.
+# Used by:  npm run dev:legacy-tls   (starts Vite with node --openssl-config=scripts/openssl-legacy.cnf)
+openssl_conf = openssl_init
+
+[openssl_init]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+Options = UnsafeLegacyRenegotiation
