@@ -58,7 +58,7 @@ export default function Logs() {
 
       return matchesSearch && matchesLevel && matchesSource
     })
-  }, [search, levelFilter, sourceFilter])
+  }, [search, levelFilter, sourceFilter, apiLogs, loadingLogs])
 
   function exportJSON() {
     const blob = new Blob([JSON.stringify(filteredLogs, null, 2)], { type: 'application/json' })
