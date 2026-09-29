@@ -1,9 +1,12 @@
 // Vercel serverless function — production stand-in for vite.config.js's dev-only
-// `/indexer-api` proxy to the Wazuh Indexer (OpenSearch). Only runs when deployed;
-// `npm run dev` never touches this file (Vite's own dev proxy handles
-// `/indexer-api/*` locally). Reached via the `/indexer-api/:path*` rewrite in
-// vercel.json, so the frontend (src/services/wazuhIndexer.js) keeps calling
-// `/indexer-api/...` unchanged.
+// `/indexer-api` proxy to the Wazuh Indexer (OpenSearch). Only runs when
+// deployed; `npm run dev` never touches this file (Vite's own dev proxy handles
+// `/indexer-api/*` locally).
+//
+// Bracket-based dynamic filenames turned out not to be routed at all for plain
+// (non-Next.js) Vercel Functions (see api/wazuh.js for the full story). Instead,
+// vercel.json rewrites every /indexer-api/* request here with the real path
+// encoded as a `path` query param.
 //
 // Basic Auth is injected here server-side from env vars, exactly like the dev
 // proxy does — the Indexer credentials never reach the browser bundle.
@@ -17,9 +20,11 @@ export default async function handler(req, res) {
     return
   }
 
-  const segments = Array.isArray(req.query.path) ? req.query.path : []
-  const search = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
-  const target = `${base.replace(/\/$/, '')}/${segments.join('/')}${search}`
+  const url = new URL(req.url, 'http://placeholder')
+  const path = url.searchParams.get('path') || ''
+  url.searchParams.delete('path')
+  const search = url.searchParams.toString()
+  const target = `${base.replace(/\/$/, '')}/${path}${search ? `?${search}` : ''}`
 
   const user = process.env.WAZUH_INDEXER_USER || 'admin'
   const password = process.env.WAZUH_INDEXER_PASSWORD || 'admin'

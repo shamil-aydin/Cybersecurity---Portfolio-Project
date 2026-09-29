@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/indexer-api/:path*", "destination": "/api/indexer/:path*" }
+    { "source": "/api/:path*", "destination": "/api/wazuh?path=:path*" },
+    { "source": "/indexer-api/:path*", "destination": "/api/indexer?path=:path*" }
   ]
 }

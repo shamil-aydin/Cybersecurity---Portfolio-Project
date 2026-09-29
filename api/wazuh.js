@@ -2,10 +2,16 @@
 // `/api` proxy to the Wazuh Manager. Only runs when deployed; `npm run dev` never
 // touches this file (Vite's own dev proxy handles `/api/*` locally).
 //
-// Unlike the Indexer function, no auth is injected here: the frontend
-// (src/services/wazuhApi.js) sends its own Authorization header (Basic once to
-// get a token, then Bearer on every call), exactly as it does against the dev
-// proxy — this function just forwards it untouched.
+// Bracket-based dynamic filenames ([...path].js / [[...path]].js) turned out not
+// to be routed at all for plain (non-Next.js) Vercel Functions — every request
+// under /api/* came back as Vercel's own platform 404, never reaching this code.
+// Instead, vercel.json rewrites every /api/* request here with the real path
+// encoded as a `path` query param, which IS a documented rewrite mechanism.
+//
+// No auth is injected here: the frontend (src/services/wazuhApi.js) sends its
+// own Authorization header (Basic once to get a token, then Bearer on every
+// call), exactly as it does against the dev proxy — this function just
+// forwards it untouched.
 import process from 'node:process'
 
 export default async function handler(req, res) {
@@ -15,9 +21,11 @@ export default async function handler(req, res) {
     return
   }
 
-  const segments = Array.isArray(req.query.path) ? req.query.path : []
-  const search = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''
-  const target = `${base.replace(/\/$/, '')}/${segments.join('/')}${search}`
+  const url = new URL(req.url, 'http://placeholder')
+  const path = url.searchParams.get('path') || ''
+  url.searchParams.delete('path')
+  const search = url.searchParams.toString()
+  const target = `${base.replace(/\/$/, '')}/${path}${search ? `?${search}` : ''}`
 
   const headers = {}
   if (req.headers.authorization) headers.authorization = req.headers.authorization
