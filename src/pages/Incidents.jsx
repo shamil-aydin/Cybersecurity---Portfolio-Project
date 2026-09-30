@@ -1,8 +1,43 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, SlidersHorizontal, X, ShieldAlert, ChevronRight, RefreshCw, User, Wifi, WifiOff } from 'lucide-react'
+import { Search, SlidersHorizontal, X, ShieldAlert, ChevronRight, RefreshCw, User } from 'lucide-react'
 import { categories, incidentStatuses } from '../data/mockData'
-import { getThreatColor } from '../utils/threatColor'
+import { getSeverityColor } from '../utils/severity'
 import { fetchIncidentsFromIndexer } from '../services/wazuhIndexer'
+import ConnectionNotice from '../components/ConnectionNotice'
+import SeverityMark from '../components/SeverityMark'
+
+const STATUS_STYLES = {
+  active: 'bg-accent text-bg border-accent',
+  open: 'bg-accent text-bg border-accent',
+  investigating: 'text-accent border-accent',
+  mitigated: 'text-muted border-line',
+  resolved: 'text-muted border-line',
+}
+
+function StatusTag({ status }) {
+  const style = STATUS_STYLES[status] || 'text-muted border-line'
+  return (
+    <span className={`inline-block border px-1.5 py-0.5 text-[10px] uppercase tracking-widest ${style}`}>
+      {status || 'unknown'}
+    </span>
+  )
+}
+
+function SeverityBar({ score, large }) {
+  return (
+    <div className={`flex items-center gap-2 ${large ? 'flex-col items-start' : ''}`}>
+      <div className={`h-2 bg-line ${large ? 'w-32' : 'w-20'}`}>
+        <div
+          className="h-2 transition-all duration-300"
+          style={{ width: `${(score / 20) * 100}%`, backgroundColor: getSeverityColor(score) }}
+        />
+      </div>
+      <span className="font-mono text-xs font-medium" style={{ color: getSeverityColor(score) }}>
+        {score}/20
+      </span>
+    </div>
+  )
+}
 
 export default function Incidents() {
   const [search, setSearch] = useState('')
@@ -11,8 +46,10 @@ export default function Incidents() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [apiSource, setApiSource] = useState('mock')
+  const [apiError, setApiError] = useState(null)
   const [incidents, setIncidents] = useState([])
   const [loadingIncidents, setLoadingIncidents] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -20,9 +57,10 @@ export default function Incidents() {
     async function loadIncidents() {
       setLoadingIncidents(true)
 
-      const res = await fetchIncidentsFromIndexer().catch(() => ({ source: 'mock', data: [] }))
+      const res = await fetchIncidentsFromIndexer().catch(() => ({ source: 'mock', data: [], error: null }))
 
       if (!cancelled) {
+        setApiError(res.error ?? null)
         if (res.source === 'wazuh') {
           // Connected: show real data even when it's an empty array — that's a
           // legitimate "no incidents yet" state, not a reason to substitute mock data.
@@ -84,7 +122,7 @@ export default function Incidents() {
     const interval = setInterval(loadIncidents, 45000)
 
     return () => { cancelled = true; clearInterval(interval) }
-  }, [])
+  }, [reloadKey])
 
   const filteredIncidents = useMemo(() => {
     return incidents.filter((incident) => {
@@ -100,35 +138,49 @@ export default function Incidents() {
 
       return matchesSearch && matchesSeverity && matchesCategory && matchesStatus
     })
-  }, [search, severityFilter, categoryFilter, statusFilter])
+  }, [search, severityFilter, categoryFilter, statusFilter, incidents])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-8 pt-8 md:px-12 md:pt-12">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Incident Management</h1>
-        <p className="text-sm text-muted-foreground mt-1">Track, investigate, and resolve security incidents
-          {apiSource === 'wazuh' && <span className="ml-2 px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">LIVE</span>}
-          {apiSource === 'mock' && <span className="ml-2 px-2 py-0.5 bg-cyber-amber/10 text-cyber-amber rounded text-xs">MOCK</span>}
+        <p className="text-xs uppercase tracking-[0.25em] text-accent">// incidents</p>
+        <h1 className="mt-2 font-display text-2xl font-bold uppercase text-ink sm:text-3xl">Incident management</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+          Track, investigate, and resolve security incidents
+          {apiSource === 'wazuh' && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-accent">
+              <span aria-hidden="true" className="h-1.5 w-1.5 bg-accent" />
+              live
+            </span>
+          )}
+          {apiSource === 'mock' && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-muted">
+              <span aria-hidden="true" className="h-1.5 w-1.5 border border-muted" />
+              mock · sample data
+            </span>
+          )}
         </p>
       </div>
 
+      <ConnectionNotice source={apiSource} error={apiError} onRetry={() => setReloadKey((k) => k + 1)} />
+
       {/* Filters */}
-      <div className="bg-card border border-border rounded-xl p-4">
+      <div className="border border-line bg-panel p-4">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 min-w-[200px] relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="text"
               placeholder="Search by ID, title, or agent..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-bg border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-cyber-blue"
+              className="w-full border border-line bg-bg py-2 pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:outline-none focus:border-accent"
             />
           </div>
 
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <SlidersHorizontal className="w-4 h-4" />
-            <span className="text-xs">Severity:</span>
+          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted">
+            <SlidersHorizontal className="h-4 w-4" />
+            Severity:
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -140,10 +192,10 @@ export default function Incidents() {
                 const val = Number(e.target.value)
                 setSeverityFilter([Math.min(val, severityFilter[1]), severityFilter[1]])
               }}
-              className="w-20 accent-cyber-blue"
+              className="w-20 accent-accent"
               title="Min severity"
             />
-            <span className="text-xs text-muted-foreground font-mono">{severityFilter[0]}–{severityFilter[1]}</span>
+            <span className="font-mono text-xs text-muted">{severityFilter[0]}–{severityFilter[1]}</span>
             <input
               type="range"
               min="0"
@@ -161,7 +213,7 @@ export default function Incidents() {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="bg-bg border border-border text-sm text-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-cyber-blue"
+            className="border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
           >
             <option value="all">All Categories</option>
             {categories.map((c) => (
@@ -174,7 +226,7 @@ export default function Incidents() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-bg border border-border text-sm text-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-cyber-blue"
+            className="border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
           >
             <option value="all">All Status</option>
             {incidentStatuses.map((s) => (
@@ -184,57 +236,59 @@ export default function Incidents() {
             ))}
           </select>
 
-          <span className="text-xs text-muted-foreground ml-auto">{filteredIncidents.length} incidents</span>
+          <span className="ml-auto text-xs uppercase tracking-widest text-muted">{filteredIncidents.length} incidents</span>
         </div>
       </div>
 
       {/* Incident List */}
-      <div className="space-y-3">
+      <div className="border-t border-line">
         {loadingIncidents ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <div className="animate-spin w-8 h-8 border-2 border-cyber-blue border-t-transparent rounded-full mx-auto mb-3" />
-            <p>Connecting to Wazuh...</p>
+          <div className="flex items-center justify-center py-16">
+            <p className="text-sm text-muted">
+              <span className="caret text-accent">connecting to wazuh</span>
+            </p>
           </div>
         ) : apiSource === 'wazuh' && incidents.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <ShieldAlert className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No incidents yet — connected to Wazuh, nothing reported so far.</p>
+          <div className="py-16 text-center text-muted">
+            <ShieldAlert className="mx-auto mb-3 h-12 w-12 opacity-40" />
+            <p className="text-sm">No incidents yet — connected to Wazuh, nothing reported so far.</p>
           </div>
         ) : filteredIncidents.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <ShieldAlert className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No incidents match your filters.</p>
+          <div className="py-16 text-center text-muted">
+            <ShieldAlert className="mx-auto mb-3 h-12 w-12 opacity-40" />
+            <p className="text-sm">No incidents match your filters.</p>
           </div>
         ) : (
           filteredIncidents.map((incident) => (
             <button
               key={incident.id}
               onClick={() => setSelectedIncident(incident)}
-              className="w-full bg-card border border-border rounded-xl p-4 text-left hover:border-cyber-blue/30 transition-colors group"
+              className="group relative flex w-full flex-wrap items-center gap-x-5 gap-y-2 border-b border-line py-4 pl-4 text-left transition-all hover:bg-panel hover:pl-6 focus-visible:bg-panel"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: getThreatColor(incident.severity, 0.125) }}>
-                  <ShieldAlert className="w-5 h-5" style={{ color: getThreatColor(incident.severity) }} />
-                </div>
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 w-[3px] origin-top scale-y-50 transition-transform group-hover:scale-y-100"
+                style={{ background: getSeverityColor(incident.severity) }}
+              />
+              <SeverityMark value={incident.severity} showValue={false} />
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-muted-foreground">{incident.id}</span>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-border text-muted-foreground">{incident.category}</span>
-                  </div>
-                  <div className="font-semibold text-foreground truncate group-hover:text-cyber-blue transition-colors">
-                    {incident.title}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3">
-                    <span className="flex items-center gap-1"><User className="w-3 h-3" /> {incident.agent}</span>
-                    <span className="font-mono">Rule: {incident.ruleId}</span>
-                  </div>
+              <div className="min-w-0 flex-1 basis-56">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-muted">{incident.id}</span>
+                  <span className="border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-muted">{incident.category}</span>
                 </div>
-
-                <SeverityBar score={incident.severity} />
-                <StatusBadge status={incident.status} />
-                <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-cyber-blue transition-colors" />
+                <div className="truncate font-semibold text-ink transition-colors group-hover:text-accent">
+                  {incident.title}
+                </div>
+                <div className="mt-0.5 flex items-center gap-3 text-xs text-muted">
+                  <span className="flex items-center gap-1"><User className="h-3 w-3" /> {incident.agent}</span>
+                  <span className="font-mono">rule {incident.ruleId}</span>
+                </div>
               </div>
+
+              <SeverityBar score={incident.severity} />
+              <StatusTag status={incident.status} />
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted transition-colors group-hover:text-accent" />
             </button>
           ))
         )}
@@ -243,64 +297,67 @@ export default function Incidents() {
       {/* Incident Detail Modal */}
       {selectedIncident && (
         <div
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setSelectedIncident(null)}
         >
           <div
-            className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-auto shadow-2xl"
+            className="max-h-[80vh] w-full max-w-2xl overflow-auto border border-line bg-panel"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-6 border-b border-border flex items-center justify-between">
+            <div className="flex items-center justify-between border-b border-line p-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: getThreatColor(selectedIncident.severity, 0.125) }}>
-                  <ShieldAlert className="w-5 h-5" style={{ color: getThreatColor(selectedIncident.severity) }} />
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center border"
+                  style={{ borderColor: getSeverityColor(selectedIncident.severity), color: getSeverityColor(selectedIncident.severity) }}
+                >
+                  <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-foreground">{selectedIncident.title}</h2>
-                  <div className="text-xs text-muted-foreground font-mono">{selectedIncident.id} · Rule {selectedIncident.ruleId}</div>
+                  <h2 className="font-display text-lg font-bold uppercase text-ink">{selectedIncident.title}</h2>
+                  <div className="font-mono text-xs text-muted">{selectedIncident.id} · Rule {selectedIncident.ruleId}</div>
                 </div>
               </div>
-              <button onClick={() => setSelectedIncident(null)} className="p-2 hover:bg-border rounded-lg transition-colors">
-                <X className="w-5 h-5 text-muted-foreground" />
+              <button onClick={() => setSelectedIncident(null)} className="p-2 text-muted transition-colors hover:text-accent">
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="space-y-6 p-6">
               <SeverityBar score={selectedIncident.severity} large />
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-bg rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Category</div>
-                  <div className="text-sm font-medium text-foreground">{selectedIncident.category}</div>
+                <div className="border border-line bg-bg p-3">
+                  <div className="text-[11px] uppercase tracking-widest text-muted">Category</div>
+                  <div className="mt-1 text-sm text-ink">{selectedIncident.category}</div>
                 </div>
-                <div className="bg-bg rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Status</div>
-                  <StatusBadge status={selectedIncident.status} />
+                <div className="border border-line bg-bg p-3">
+                  <div className="text-[11px] uppercase tracking-widest text-muted">Status</div>
+                  <div className="mt-1"><StatusTag status={selectedIncident.status} /></div>
                 </div>
-                <div className="bg-bg rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Source IP</div>
-                  <div className="text-sm font-mono text-foreground">{selectedIncident.sourceIp}</div>
+                <div className="border border-line bg-bg p-3">
+                  <div className="text-[11px] uppercase tracking-widest text-muted">Source IP</div>
+                  <div className="mt-1 font-mono text-sm text-ink">{selectedIncident.sourceIp}</div>
                 </div>
-                <div className="bg-bg rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground mb-1">Agent</div>
-                  <div className="text-sm font-medium text-foreground flex items-center gap-1"><User className="w-3 h-3" /> {selectedIncident.agent}</div>
+                <div className="border border-line bg-bg p-3">
+                  <div className="text-[11px] uppercase tracking-widest text-muted">Agent</div>
+                  <div className="mt-1 flex items-center gap-1 text-sm text-ink"><User className="h-3 w-3" /> {selectedIncident.agent}</div>
                 </div>
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-foreground mb-2">Description</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{selectedIncident.description}</p>
+                <h4 className="text-[11px] uppercase tracking-widest text-muted">Description</h4>
+                <p className="mt-2 text-sm leading-relaxed text-ink">{selectedIncident.description}</p>
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-foreground mb-2">Mitigation Suggestions</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed flex gap-2">
-                  <RefreshCw className="w-4 h-4 shrink-0 text-cyber-amber" />
+                <h4 className="text-[11px] uppercase tracking-widest text-muted">Mitigation suggestions</h4>
+                <p className="mt-2 flex gap-2 text-sm leading-relaxed text-ink">
+                  <RefreshCw className="h-4 w-4 shrink-0 text-accent" />
                   {selectedIncident.mitigation}
                 </p>
               </div>
 
-              <div className="text-xs text-muted-foreground pt-4 border-t border-border">
+              <div className="border-t border-line pt-4 text-xs text-muted">
                 Detected at {new Date(selectedIncident.timestamp).toLocaleString()}
               </div>
             </div>
@@ -308,38 +365,5 @@ export default function Incidents() {
         </div>
       )}
     </div>
-  )
-}
-
-function SeverityBar({ score, large }) {
-  return (
-    <div className={`flex items-center gap-2 ${large ? 'flex-col items-start' : ''}`}>
-      <div className={`bg-border rounded-full overflow-hidden ${large ? 'w-32' : 'w-20'}`}>
-        <div
-          className="h-2 rounded-full transition-all duration-300"
-          style={{ width: `${(score / 20) * 100}%`, backgroundColor: getThreatColor(score) }}
-        />
-      </div>
-      <span className="text-xs font-mono font-medium" style={{ color: getThreatColor(score) }}>
-        {score}/20
-      </span>
-    </div>
-  )
-}
-
-function StatusBadge({ status }) {
-  const styles = {
-    open: { bg: 'bg-cyber-red/10', text: 'text-cyber-red', dot: 'bg-cyber-red' },
-    active: { bg: 'bg-cyber-red/10', text: 'text-cyber-red', dot: 'bg-cyber-red' },
-    investigating: { bg: 'bg-cyber-amber/10', text: 'text-cyber-amber', dot: 'bg-cyber-amber' },
-    mitigated: { bg: 'bg-cyber-blue/10', text: 'text-cyber-blue', dot: 'bg-cyber-blue' },
-    resolved: { bg: 'bg-green-500/10', text: 'text-green-400', dot: 'bg-green-400' },
-  }
-  const s = styles[status] ?? styles.open
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.bg} ${s.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
-    </span>
   )
 }

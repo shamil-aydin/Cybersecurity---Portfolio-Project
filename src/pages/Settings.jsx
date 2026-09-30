@@ -55,96 +55,97 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6 px-8 pt-8 md:px-12 md:pt-12">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Wazuh Manager connection and dashboard preferences</p>
+        <p className="text-xs uppercase tracking-[0.25em] text-accent">// settings</p>
+        <h1 className="mt-2 font-display text-2xl font-bold uppercase text-ink sm:text-3xl">Settings</h1>
+        <p className="mt-1 text-sm text-muted">Wazuh Manager connection and dashboard preferences</p>
       </div>
 
       {/* Wazuh Manager Connection */}
-      <section className="bg-card border border-border rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-cyber-blue/10 flex items-center justify-center">
-            <Server className="w-5 h-5 text-cyber-blue" />
+      <section className="max-w-3xl border border-line bg-panel p-6">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-line text-accent">
+            <Server className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-foreground">Wazuh Manager</h2>
-            <p className="text-xs text-muted-foreground">Connection settings for Wazuh API</p>
+            <h2 className="font-display text-base font-bold uppercase text-ink">Wazuh Manager</h2>
+            <p className="text-xs text-muted">Connection settings for Wazuh API</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Server IP Address</label>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-widest text-muted">Server IP Address</label>
             <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-muted-foreground" />
+              <Shield className="h-4 w-4 text-muted" />
               <input
                 type="text"
                 value={settings.serverIp}
                 onChange={(e) => handleChange('serverIp', e.target.value)}
-                className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-cyber-blue"
+                className="flex-1 border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
                 placeholder="10.0.2.8"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">API Port</label>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-widest text-muted">API Port</label>
             <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-muted-foreground" />
+              <Database className="h-4 w-4 text-muted" />
               <input
                 type="number"
                 value={settings.apiPort}
                 onChange={(e) => handleChange('apiPort', Number(e.target.value))}
-                className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-foreground font-mono focus:outline-none focus:border-cyber-blue"
+                className="flex-1 border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
                 placeholder="55000"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Username</label>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-widest text-muted">Username</label>
             <div className="flex items-center gap-2">
-              <Key className="w-4 h-4 text-muted-foreground" />
+              <Key className="h-4 w-4 text-muted" />
               <input
                 type="text"
                 value={settings.username}
                 onChange={(e) => handleChange('username', e.target.value)}
-                className="flex-1 bg-bg border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-cyber-blue"
+                className="flex-1 border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
                 placeholder="wazuh"
               />
             </div>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5">Password</label>
+            <label className="mb-1.5 block text-[11px] uppercase tracking-widest text-muted">Password</label>
             <input
               type="password"
               value={settings.password}
               onChange={(e) => handleChange('password', e.target.value)}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-cyber-blue"
+              className="w-full border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
               placeholder="••••••••"
             />
           </div>
         </div>
 
-        <div className="mt-6 pt-6 border-t border-border">
-          <h3 className="text-sm font-semibold text-foreground mb-4">Health Check</h3>
-          <div className="flex items-center gap-4">
+        <div className="mt-6 border-t border-line pt-6">
+          <h3 className="mb-4 text-[11px] uppercase tracking-widest text-muted">Health check</h3>
+          <div className="flex flex-wrap items-center gap-4">
             <button
               onClick={checkHealth}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-cyber-blue/10 text-cyber-blue hover:bg-cyber-blue/20 transition-colors"
+              className="flex items-center gap-2 border border-line px-4 py-2 text-xs uppercase tracking-widest text-muted transition-colors hover:border-accent hover:text-accent"
             >
-              <RefreshCw className="w-4 h-4" />
+              <RefreshCw className="h-4 w-4" />
               Check API Status
             </button>
 
             <span className={`inline-flex items-center gap-1.5 text-sm ${
-              status === 'ok' ? 'text-green-400' : status === 'error' ? 'text-cyber-red' : 'text-muted-foreground'
+              status === 'ok' ? 'text-accent' : status === 'error' ? 'text-cyber-red' : 'text-muted'
             }`}>
-              {status === 'ok' && <CheckCircle className="w-4 h-4" />}
-              {status === 'error' && <XCircle className="w-4 h-4" />}
-              {status === 'checking' && <RefreshCw className="w-4 h-4 animate-spin" />}
+              {status === 'ok' && <CheckCircle className="h-4 w-4" />}
+              {status === 'error' && <XCircle className="h-4 w-4" />}
+              {status === 'checking' && <RefreshCw className="h-4 w-4 animate-spin" />}
               {status === 'ok' && `API reachable · ${result?.latencyMs}ms${result?.version ? ` · v${result.version}` : ''}`}
               {status === 'error' && (result?.title || 'Connection failed')}
               {status === 'checking' && 'Checking...'}
@@ -153,7 +154,7 @@ export default function Settings() {
             </span>
 
             {lastChecked && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted">
                 Last checked: {lastChecked.toLocaleTimeString()}
               </span>
             )}
@@ -162,33 +163,33 @@ export default function Settings() {
       </section>
 
       {/* Preferences */}
-      <section className="bg-card border border-border rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-lg bg-cyber-amber/10 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-cyber-amber" />
+      <section className="max-w-3xl border border-line bg-panel p-6">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center border border-line text-accent">
+            <Shield className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-foreground">Preferences</h2>
-            <p className="text-xs text-muted-foreground">Dashboard behavior and alert settings</p>
+            <h2 className="font-display text-base font-bold uppercase text-ink">Preferences</h2>
+            <p className="text-xs text-muted">Dashboard behavior and alert settings</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-foreground">Auto Mitigation</div>
-              <div className="text-xs text-muted-foreground">Automatically block confirmed threats</div>
+              <div className="text-sm text-ink">Auto Mitigation</div>
+              <div className="text-xs text-muted">Automatically block confirmed threats</div>
             </div>
             <button
               onClick={() => handleChange('autoMitigation', !settings.autoMitigation)}
-              className={`w-11 h-6 rounded-full transition-colors ${
-                settings.autoMitigation ? 'bg-cyber-blue' : 'bg-border'
+              className={`h-6 w-11 border border-line transition-colors ${
+                settings.autoMitigation ? 'bg-accent' : 'bg-bg'
               }`}
               role="switch"
               aria-checked={settings.autoMitigation}
             >
               <div
-                className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                className={`h-4 w-4 bg-ink transition-transform ${
                   settings.autoMitigation ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
@@ -197,19 +198,19 @@ export default function Settings() {
 
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-foreground">Alert Notifications</div>
-              <div className="text-xs text-muted-foreground">Show real-time notifications for critical events</div>
+              <div className="text-sm text-ink">Alert Notifications</div>
+              <div className="text-xs text-muted">Show real-time notifications for critical events</div>
             </div>
             <button
               onClick={() => handleChange('alertNotifications', !settings.alertNotifications)}
-              className={`w-11 h-6 rounded-full transition-colors ${
-                settings.alertNotifications ? 'bg-cyber-blue' : 'bg-border'
+              className={`h-6 w-11 border border-line transition-colors ${
+                settings.alertNotifications ? 'bg-accent' : 'bg-bg'
               }`}
               role="switch"
               aria-checked={settings.alertNotifications}
             >
               <div
-                className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                className={`h-4 w-4 bg-ink transition-transform ${
                   settings.alertNotifications ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
@@ -222,12 +223,12 @@ export default function Settings() {
       <div className="flex items-center gap-3">
         <button
           onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium bg-cyber-blue text-white hover:bg-cyber-blue/80 transition-colors"
+          className="flex items-center gap-2 border border-accent bg-accent px-5 py-2.5 text-xs uppercase tracking-widest text-bg transition-colors hover:bg-transparent hover:text-accent"
         >
-          <Save className="w-4 h-4" />
+          <Save className="h-4 w-4" />
           Save Settings
         </button>
-        {saved && <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Saved to local storage</span>}
+        {saved && <span className="flex items-center gap-1 text-xs text-accent"><CheckCircle className="h-3.5 w-3.5" /> Saved to local storage</span>}
       </div>
     </div>
   )

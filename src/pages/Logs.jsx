@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Download, FileJson, FileSpreadsheet, Filter, ChevronDown, Clock } from 'lucide-react'
+import { Search, FileJson, FileSpreadsheet, Filter } from 'lucide-react'
 import { logEntries, logLevels, logSources } from '../data/mockData'
 import { fetchLogsFromIndexer } from '../services/wazuhIndexer'
+import ConnectionNotice from '../components/ConnectionNotice'
 
 export default function Logs() {
   const [search, setSearch] = useState('')
@@ -12,7 +13,9 @@ export default function Logs() {
   // Live Wazuh API logs state
   const [apiLogs, setApiLogs] = useState([])
   const [apiSource, setApiSource] = useState('mock')
+  const [apiError, setApiError] = useState(null)
   const [loadingLogs, setLoadingLogs] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -20,9 +23,10 @@ export default function Logs() {
     async function loadLogs() {
       setLoadingLogs(true)
 
-      const res = await fetchLogsFromIndexer().catch(() => ({ source: 'mock', data: logEntries }))
+      const res = await fetchLogsFromIndexer().catch(() => ({ source: 'mock', data: logEntries, error: null }))
 
       if (!cancelled) {
+        setApiError(res.error ?? null)
         if (res.source === 'wazuh') {
           // Connected: show real data even when it's an empty array — that's a
           // legitimate "no log events yet" state, not a reason to substitute mock data.
@@ -42,7 +46,7 @@ export default function Logs() {
     const interval = setInterval(loadLogs, 60000)
 
     return () => { cancelled = true; clearInterval(interval) }
-  }, [])
+  }, [reloadKey])
 
   const filteredLogs = useMemo(() => {
     const logs = loadingLogs ? [] : apiLogs
@@ -91,33 +95,47 @@ export default function Logs() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-8 pt-8 md:px-12 md:pt-12">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Security Logs</h1>
-        <p className="text-sm text-muted-foreground mt-1">Raw security event stream — search, filter, and export
-          {apiSource === 'wazuh' && <span className="ml-2 px-2 py-0.5 bg-green-500/10 text-green-400 rounded text-xs">LIVE</span>}
-          {apiSource === 'mock' && <span className="ml-2 px-2 py-0.5 bg-cyber-amber/10 text-cyber-amber rounded text-xs">MOCK</span>}
+        <p className="text-xs uppercase tracking-[0.25em] text-accent">// logs</p>
+        <h1 className="mt-2 font-display text-2xl font-bold uppercase text-ink sm:text-3xl">Security logs</h1>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+          Raw security event stream — search, filter, and export
+          {apiSource === 'wazuh' && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-accent">
+              <span aria-hidden="true" className="h-1.5 w-1.5 bg-accent" />
+              live
+            </span>
+          )}
+          {apiSource === 'mock' && (
+            <span className="inline-flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-muted">
+              <span aria-hidden="true" className="h-1.5 w-1.5 border border-muted" />
+              mock · sample data
+            </span>
+          )}
         </p>
       </div>
 
+      <ConnectionNotice source={apiSource} error={apiError} onRetry={() => setReloadKey((k) => k + 1)} />
+
       {/* Toolbar */}
-      <div className="bg-card border border-border rounded-xl p-4">
+      <div className="border border-line bg-panel p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex-1 min-w-[240px] relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
             <input
               type="text"
               placeholder="Search logs by message, source, or ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-bg border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-cyber-blue"
+              className="w-full border border-line bg-bg py-2 pl-10 pr-4 text-sm text-ink placeholder:text-muted focus:outline-none focus:border-accent"
             />
           </div>
 
           <select
             value={levelFilter}
             onChange={(e) => setLevelFilter(e.target.value)}
-            className="bg-bg border border-border text-sm text-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-cyber-blue"
+            className="border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
           >
             <option value="all">All Levels</option>
             {logLevels.map((l) => (
@@ -130,7 +148,7 @@ export default function Logs() {
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="bg-bg border border-border text-sm text-foreground rounded-lg px-3 py-2 focus:outline-none focus:border-cyber-blue"
+            className="border border-line bg-bg px-3 py-2 text-sm text-ink focus:outline-none focus:border-accent"
           >
             <option value="all">All Sources</option>
             {logSources.map((s) => (
@@ -142,29 +160,29 @@ export default function Logs() {
 
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-              showFilters ? 'bg-cyber-blue/20 text-cyber-blue' : 'bg-bg text-muted-foreground hover:text-foreground'
+            className={`flex items-center gap-2 border px-3 py-2 text-xs uppercase tracking-widest transition-colors ${
+              showFilters ? 'border-accent text-accent' : 'border-line text-muted hover:text-ink'
             }`}
           >
-            <Filter className="w-4 h-4" />
+            <Filter className="h-4 w-4" />
             Filters
           </button>
 
-          <span className="text-xs text-muted-foreground ml-auto">{filteredLogs.length} events</span>
+          <span className="ml-auto text-xs uppercase tracking-widest text-muted">{filteredLogs.length} events</span>
 
           <div className="flex gap-2">
             <button
               onClick={exportJSON}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyber-blue/10 text-cyber-blue hover:bg-cyber-blue/20 transition-colors"
+              className="flex items-center gap-1.5 border border-line px-3 py-2 text-xs uppercase tracking-widest text-muted transition-colors hover:border-accent hover:text-accent"
             >
-              <FileJson className="w-3.5 h-3.5" />
+              <FileJson className="h-3.5 w-3.5" />
               JSON
             </button>
             <button
               onClick={exportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-cyber-amber/10 text-cyber-amber hover:bg-cyber-amber/20 transition-colors"
+              className="flex items-center gap-1.5 border border-line px-3 py-2 text-xs uppercase tracking-widest text-muted transition-colors hover:border-accent hover:text-accent"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <FileSpreadsheet className="h-3.5 w-3.5" />
               CSV
             </button>
           </div>
@@ -172,31 +190,30 @@ export default function Logs() {
       </div>
 
       {/* Log Table */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+      <div className="border border-line bg-panel overflow-hidden">
+        <div className="max-h-[600px] overflow-x-auto overflow-y-auto">
           {loadingLogs ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="text-center">
-                <div className="animate-spin w-8 h-8 border-2 border-cyber-blue border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-sm text-muted-foreground">Connecting to Wazuh...</p>
-              </div>
+            <div className="flex h-64 items-center justify-center">
+              <p className="text-sm text-muted">
+                <span className="caret text-accent">connecting to wazuh</span>
+              </p>
             </div>
           ) : (
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-card z-10">
-              <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                <th className="py-3 px-4 font-medium">ID</th>
-                <th className="py-3 px-4 font-medium">Timestamp</th>
-                <th className="py-3 px-4 font-medium">Level</th>
-                <th className="py-3 px-4 font-medium">Source</th>
-                <th className="py-3 px-4 font-medium">Message</th>
-                <th className="py-3 px-4 font-medium">Rule ID</th>
+            <thead className="sticky top-0 z-10 bg-panel">
+              <tr className="border-b border-line text-left text-[11px] uppercase tracking-widest text-muted">
+                <th className="px-4 py-3 font-medium">ID</th>
+                <th className="px-4 py-3 font-medium">Timestamp</th>
+                <th className="px-4 py-3 font-medium">Level</th>
+                <th className="px-4 py-3 font-medium">Source</th>
+                <th className="px-4 py-3 font-medium">Message</th>
+                <th className="px-4 py-3 font-medium">Rule ID</th>
               </tr>
             </thead>
             <tbody>
               {filteredLogs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-16 text-center text-muted-foreground">
+                  <td colSpan={6} className="py-16 text-center text-sm text-muted">
                     {apiSource === 'wazuh' && apiLogs.length === 0
                       ? 'No log events yet — connected to Wazuh, nothing reported so far.'
                       : 'No log events match your filters.'}
@@ -204,17 +221,17 @@ export default function Logs() {
                 </tr>
               )}
               {filteredLogs.map((entry) => (
-                <tr key={entry.id} className="border-b border-border/30 hover:bg-cyber-blue/5 transition-colors">
-                  <td className="py-3 px-4 text-muted-foreground font-mono text-xs">#{entry.id}</td>
-                  <td className="py-3 px-4 text-muted-foreground font-mono text-xs">
+                <tr key={entry.id} className="border-b border-line/50 transition-colors hover:bg-bg">
+                  <td className="px-4 py-3 font-mono text-xs text-muted">#{entry.id}</td>
+                  <td className="px-4 py-3 font-mono text-xs tabular-nums text-muted">
                     {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="px-4 py-3">
                     <LevelBadge level={entry.level} />
                   </td>
-                  <td className="py-3 px-4 text-muted-foreground text-xs">{entry.source}</td>
-                  <td className="py-3 px-4 text-foreground max-w-sm truncate">{entry.message}</td>
-                  <td className="py-3 px-4 font-mono text-xs text-muted-foreground">{entry.ruleId || '—'}</td>
+                  <td className="px-4 py-3 text-xs text-muted">{entry.source}</td>
+                  <td className="max-w-sm truncate px-4 py-3 text-ink">{entry.message}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted">{entry.ruleId || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -226,26 +243,18 @@ export default function Logs() {
   )
 }
 
+const LEVEL_STYLES = {
+  DEBUG: 'text-muted border-line',
+  INFO: 'text-accent border-accent',
+  WARNING: 'text-accent border-accent',
+  ERROR: 'text-cyber-red border-cyber-red',
+  CRITICAL: 'bg-cyber-red text-bg border-cyber-red',
+}
+
 function LevelBadge({ level }) {
-  const styles = {
-    DEBUG: 'text-muted-foreground',
-    INFO: 'text-cyber-blue',
-    WARNING: 'text-cyber-amber',
-    ERROR: 'text-cyber-red',
-    CRITICAL: 'text-red-400',
-  }
-
-  const dotColors = {
-    DEBUG: 'bg-muted-foreground',
-    INFO: 'bg-cyber-blue',
-    WARNING: 'bg-cyber-amber',
-    ERROR: 'bg-cyber-red',
-    CRITICAL: 'bg-red-400',
-  }
-
+  const style = LEVEL_STYLES[level] || 'text-muted border-line'
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-mono ${styles[level]}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dotColors[level]}`} />
+    <span className={`inline-block border px-1.5 py-0.5 text-[10px] uppercase tracking-widest ${style}`}>
       {level}
     </span>
   )
